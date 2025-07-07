@@ -10,40 +10,52 @@ export default fp(async (fastify) => {
   fastify.after(() => {
     const io = fastify.io;
 
+    let streamerSocket: Socket | null = null;
+
     io.on("connection", (socket: Socket) => {
       fastify.log.info(`✅ Client connected: ${socket.id}`);
 
-      socket.on("join-room", (room: string) => {
-        fastify.log.info(`🚪 ${socket.id} joined room ${room}`);
-        socket.join(room);
-      });
-
-      socket.on("offer", (data: { sdp: string }) => {
-        fastify.log.info(
-          `📡 Offer from ${socket.id}: ${data.sdp.slice(0, 30)}...`
-        );
-        socket.to("stream-room").emit("offer", { sdp: data.sdp });
-      });
-
-      socket.on("answer", (data: { sdp: string }) => {
-        fastify.log.info(`🎯 Answer from ${socket.id}`);
-        socket.to("stream-room").emit("answer", { sdp: data.sdp });
-      });
-
-      socket.on(
-        "ice-candidate",
-        (data: {
-          candidate: string;
-          sdpMid: string;
-          sdpMLineIndex: number;
-        }) => {
-          fastify.log.info(`❄️ ICE candidate from ${socket.id}`);
-          socket.to("stream-room").emit("ice-candidate", data);
+      socket.on("join-room", (role: string) => {
+        if (role === "streamer") {
+          fastify.log.info(`📹 ${socket.id} registered as streamer`);
+          streamerSocket = socket;
+        } else if (role === "viewer") {
+          fastify.log.info(`👀 ${socket.id} registered as viewer`);
+          socket.emit("request-offer");
+          if (streamerSocket) {
+            streamerSocket.emit("create-offer", { viewerId: socket.id });
+          }
         }
-      );
+      });
+
+      socket.on("offer", ({ sdp, viewerId }) => {
+        fastify.log.info(`📡 Offer from streamer for viewer ${viewerId}`);
+        io.to(viewerId).emit("offer", { sdp });
+      });
+
+      socket.on("answer", ({ sdp, viewerId }) => {
+        fastify.log.info(`🎯 Answer from viewerId: ${socket.id} to streamer`);
+        if (streamerSocket) {
+          streamerSocket.emit("answer", { sdp, viewerId: socket.id });
+        }
+      });
+
+      socket.on("ice-candidate", (data) => {
+        if (data.to) {
+          io.to(data.to).emit("ice-candidate", {
+            candidate: data.candidate,
+            sdpMid: data.sdpMid,
+            sdpMLineIndex: data.sdpMLineIndex,
+            from: socket.id
+          });
+        }
+      });
 
       socket.on("disconnect", () => {
         fastify.log.info(`⛔ Client disconnected: ${socket.id}`);
+        if (streamerSocket?.id === socket.id) {
+          streamerSocket = null;
+        }
       });
     });
   });

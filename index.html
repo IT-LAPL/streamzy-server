@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WebRTC Viewer</title>
+</head>
+<body>
+  <h1>WebRTC Viewer (click video to enable sound)</h1>
+  <video id="remoteVideo" autoplay playsinline muted style="width:80%; border:2px solid #333;"></video>
+
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <script>
+    const socket = io("http://192.168.1.157:8080");
+    const video = document.getElementById("remoteVideo");
+    let peerConnection;
+    const pendingCandidates = [];
+
+    video.addEventListener("click", () => {
+      video.muted = false;
+      video.play();
+    });
+
+    socket.on("connect", () => {
+      console.log("✅ Connected to signaling");
+      socket.emit("join-room", "viewer");
+    });
+
+    socket.on("offer", async ({ sdp }) => {
+      console.log("📡 Got offer");
+      peerConnection = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
+
+      peerConnection.ontrack = (event) => {
+        console.log("🎥 Received remote stream");
+        video.srcObject = event.streams[0];
+        video.play().catch(e => console.error("Auto-play blocked:", e));
+      };
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit("ice-candidate", {
+            to: null,
+            candidate: event.candidate.candidate,
+            sdpMid: event.candidate.sdpMid,
+            sdpMLineIndex: event.candidate.sdpMLineIndex
+          });
+        }
+      };
+
+      await peerConnection.setRemoteDescription(new RTCSessionDescription({
+        type: "offer",
+        sdp
+      }));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      socket.emit("answer", { sdp: answer.sdp });
+
+      for (const data of pendingCandidates) {
+        await peerConnection.addIceCandidate(new RTCIceCandidate({
+          candidate: data.candidate,
+          sdpMid: data.sdpMid,
+          sdpMLineIndex: data.sdpMLineIndex
+        }));
+      }
+      pendingCandidates.length = 0;
+    });
+
+    socket.on("ice-candidate", async (data) => {
+      console.log("❄️ Got ICE from streamer");
+      if (peerConnection) {
+        await peerConnection.addIceCandidate(new RTCIceCandidate({
+          candidate: data.candidate,
+          sdpMid: data.sdpMid,
+          sdpMLineIndex: data.sdpMLineIndex
+        }));
+      } else {
+        pendingCandidates.push(data);
+      }
+    });
+  </script>
+</body>
+</html>
