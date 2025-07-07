@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import firebase from "./plugins/firebase";
 import healthRoute from "./routes/health";
 import userRoute from "./routes/user";
+import signaling from "./plugins/socket";
 
 export function buildServer() {
   const fastify = Fastify({
@@ -19,6 +20,7 @@ export function buildServer() {
   });
 
   fastify.register(firebase);
+  fastify.register(signaling);
   fastify.register(healthRoute);
   fastify.register(userRoute);
 
