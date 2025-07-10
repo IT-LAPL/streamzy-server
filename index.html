@@ -1,83 +1,122 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>WebRTC Viewer</title>
-</head>
-<body>
-  <h1>WebRTC Viewer (click video to enable sound)</h1>
-  <video id="remoteVideo" autoplay playsinline muted style="width:80%; border:2px solid #333;"></video>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebRTC Viewer</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #111;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .phone-mockup {
+        height: 100vh;
+        aspect-ratio: 9 / 16;
+        background: #000;
+        border-radius: 30px;
+        overflow: hidden;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        max-height: 100vh;
+        max-width: 100vw;
+      }
+      video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="phone-mockup">
+      <video id="remoteVideo" autoplay playsinline muted></video>
+    </div>
 
-  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
-  <script>
-    const socket = io("http://192.168.1.157:8080");
-    const video = document.getElementById("remoteVideo");
-    let peerConnection;
-    const pendingCandidates = [];
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <script>
+      const socket = io("http://192.168.1.157:8080");
+      const video = document.getElementById("remoteVideo");
+      let peerConnection;
+      const pendingCandidates = [];
 
-    video.addEventListener("click", () => {
-      video.muted = false;
-      video.play();
-    });
-
-    socket.on("connect", () => {
-      console.log("✅ Connected to signaling");
-      socket.emit("join-room", "viewer");
-    });
-
-    socket.on("offer", async ({ sdp }) => {
-      console.log("📡 Got offer");
-      peerConnection = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      video.addEventListener("click", () => {
+        video.muted = false;
+        video.play();
       });
 
-      peerConnection.ontrack = (event) => {
-        console.log("🎥 Received remote stream");
-        video.srcObject = event.streams[0];
-        video.play().catch(e => console.error("Auto-play blocked:", e));
-      };
+      socket.on("connect", () => {
+        console.log("✅ Connected to signaling");
+        socket.emit("join-room", "viewer");
+      });
 
-      peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          socket.emit("ice-candidate", {
-            to: null,
-            candidate: event.candidate.candidate,
-            sdpMid: event.candidate.sdpMid,
-            sdpMLineIndex: event.candidate.sdpMLineIndex
-          });
+      socket.on("offer", async ({ sdp }) => {
+        console.log("📡 Got offer");
+        peerConnection = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+        });
+
+        peerConnection.ontrack = (event) => {
+          console.log("🎥 Received remote stream");
+          video.srcObject = event.streams[0];
+          video.play().catch((e) => console.error("Auto-play blocked:", e));
+        };
+
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate) {
+            socket.emit("ice-candidate", {
+              to: null,
+              candidate: event.candidate.candidate,
+              sdpMid: event.candidate.sdpMid,
+              sdpMLineIndex: event.candidate.sdpMLineIndex
+            });
+          }
+        };
+
+        await peerConnection.setRemoteDescription(
+          new RTCSessionDescription({
+            type: "offer",
+            sdp
+          })
+        );
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit("answer", { sdp: answer.sdp });
+
+        for (const data of pendingCandidates) {
+          await peerConnection.addIceCandidate(
+            new RTCIceCandidate({
+              candidate: data.candidate,
+              sdpMid: data.sdpMid,
+              sdpMLineIndex: data.sdpMLineIndex
+            })
+          );
         }
-      };
+        pendingCandidates.length = 0;
+      });
 
-      await peerConnection.setRemoteDescription(new RTCSessionDescription({
-        type: "offer",
-        sdp
-      }));
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      socket.emit("answer", { sdp: answer.sdp });
-
-      for (const data of pendingCandidates) {
-        await peerConnection.addIceCandidate(new RTCIceCandidate({
-          candidate: data.candidate,
-          sdpMid: data.sdpMid,
-          sdpMLineIndex: data.sdpMLineIndex
-        }));
-      }
-      pendingCandidates.length = 0;
-    });
-
-    socket.on("ice-candidate", async (data) => {
-      console.log("❄️ Got ICE from streamer");
-      if (peerConnection) {
-        await peerConnection.addIceCandidate(new RTCIceCandidate({
-          candidate: data.candidate,
-          sdpMid: data.sdpMid,
-          sdpMLineIndex: data.sdpMLineIndex
-        }));
-      } else {
-        pendingCandidates.push(data);
-      }
-    });
-  </script>
-</body>
+      socket.on("ice-candidate", async (data) => {
+        console.log("❄️ Got ICE from streamer");
+        if (peerConnection) {
+          await peerConnection.addIceCandidate(
+            new RTCIceCandidate({
+              candidate: data.candidate,
+              sdpMid: data.sdpMid,
+              sdpMLineIndex: data.sdpMLineIndex
+            })
+          );
+        } else {
+          pendingCandidates.push(data);
+        }
+      });
+    </script>
+  </body>
 </html>
