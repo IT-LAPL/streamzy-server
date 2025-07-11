@@ -46,12 +46,26 @@ export default fp(async (fastify) => {
 
       socket.on("ice-candidate", (data) => {
         if (data.to) {
-          io.to(data.to).emit("ice-candidate", {
-            candidate: data.candidate,
-            sdpMid: data.sdpMid,
-            sdpMLineIndex: data.sdpMLineIndex,
-            from: socket.id
-          });
+          // Handle routing ICE candidates
+          if (data.to === "streamer" && streamerSocket) {
+            // Viewer sending to streamer
+            streamerSocket.emit("ice-candidate", {
+              candidate: data.candidate,
+              sdpMid: data.sdpMid,
+              sdpMLineIndex: data.sdpMLineIndex,
+              from: socket.id
+            });
+            fastify.log.info(`🧊 ICE from viewer ${socket.id} to streamer`);
+          } else {
+            // Streamer sending to specific viewer
+            io.to(data.to).emit("ice-candidate", {
+              candidate: data.candidate,
+              sdpMid: data.sdpMid,
+              sdpMLineIndex: data.sdpMLineIndex,
+              from: socket.id
+            });
+            fastify.log.info(`🧊 ICE from streamer to viewer ${data.to}`);
+          }
         }
       });
 
