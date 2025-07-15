@@ -5,6 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch src/server.ts",
+    "build": "tsup",
+    "start": "node dist/server.js",
     "format": "prettier --write .",
     "lint": "eslint . ",
     "lint:fix": "eslint . --fix "
@@ -16,6 +18,7 @@
     "eslint": "^9.30.0",
     "globals": "^16.2.0",
     "prettier": "^3.6.2",
+    "tsup": "^8.5.0",
     "typescript-eslint": "^8.35.0"
   },
   "peerDependencies": {
@@ -23,6 +26,7 @@
   },
   "dependencies": {
     "@fastify/websocket": "^11.1.0",
+    "dotenv": "^17.2.0",
     "fastify": "^5.4.0",
     "fastify-socket.io": "^5.1.0",
     "fastify-websocket": "^4.3.0",

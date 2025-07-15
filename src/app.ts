@@ -5,18 +5,22 @@ import userRoute from "./routes/user";
 import signaling from "./plugins/socket";
 
 export function buildServer() {
+  const isDev = process.env.NODE_ENV !== "production";
+
   const fastify = Fastify({
-    logger: {
-      transport: {
-        target: "pino-pretty",
-        options: {
-          colorize: true,
-          translateTime: "HH:MM:ss Z",
-          ignore: "pid,hostname",
-          singleLine: true
+    logger: isDev
+      ? {
+          transport: {
+            target: "pino-pretty",
+            options: {
+              colorize: true,
+              translateTime: "HH:MM:ss Z",
+              ignore: "pid,hostname",
+              singleLine: true
+            }
+          }
         }
-      }
-    }
+      : true // simple production logger
   });
 
   fastify.register(firebase);
