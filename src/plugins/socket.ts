@@ -26,19 +26,22 @@ export default fp(async (fastify) => {
           const streamRoom: StreamRoom = {
             streamerId,
             streamerSocket: socket,
-            viewers: new Map(),
+            viewers: new Map()
           };
-          
+
           activeStreams.set(streamerId, streamRoom);
           socket.join(`stream_${streamerId}`);
-          
-          fastify.log.info(`🎥 Streamer ${socket.id} started stream ${streamerId}`);
-        } 
-        else if (role === "viewer") {
+
+          fastify.log.info(
+            `🎥 Streamer ${socket.id} started stream ${streamerId}`
+          );
+        } else if (role === "viewer") {
           const streamRoom = activeStreams.get(streamerId);
-          
+
           if (!streamRoom) {
-            fastify.log.warn(`❌ Viewer ${socket.id} tried to join non-existent stream ${streamerId}`);
+            fastify.log.warn(
+              `❌ Viewer ${socket.id} tried to join non-existent stream ${streamerId}`
+            );
             socket.emit("error", { message: "Stream not found" });
             return;
           }
@@ -46,11 +49,15 @@ export default fp(async (fastify) => {
           // Add viewer to stream room
           streamRoom.viewers.set(socket.id, socket);
           socket.join(`stream_${streamerId}`);
-          
-          fastify.log.info(`👀 Viewer ${socket.id} joined stream ${streamerId}`);
+
+          fastify.log.info(
+            `👀 Viewer ${socket.id} joined stream ${streamerId}`
+          );
 
           // Request offer from streamer for this viewer
-          streamRoom.streamerSocket.emit("create-offer", { viewerId: socket.id });
+          streamRoom.streamerSocket.emit("create-offer", {
+            viewerId: socket.id
+          });
         }
       });
 
@@ -63,7 +70,9 @@ export default fp(async (fastify) => {
 
         const viewerSocket = streamRoom.viewers.get(viewerId);
         if (viewerSocket) {
-          fastify.log.info(`📡 Offer from streamer ${streamerId} to viewer ${viewerId}`);
+          fastify.log.info(
+            `📡 Offer from streamer ${streamerId} to viewer ${viewerId}`
+          );
           viewerSocket.emit("offer", { sdp, streamerId });
         }
       });
@@ -75,20 +84,24 @@ export default fp(async (fastify) => {
           return;
         }
 
-        fastify.log.info(`🎯 Answer from viewer ${socket.id} to streamer ${streamerId}`);
-        streamRoom.streamerSocket.emit("answer", { 
-          sdp, 
+        fastify.log.info(
+          `🎯 Answer from viewer ${socket.id} to streamer ${streamerId}`
+        );
+        streamRoom.streamerSocket.emit("answer", {
+          sdp,
           viewerId: socket.id,
-          streamerId 
+          streamerId
         });
       });
 
       socket.on("ice-candidate", (data) => {
         const { streamerId } = data;
         const streamRoom = activeStreams.get(streamerId);
-        
+
         if (!streamRoom) {
-          fastify.log.warn(`❌ ICE candidate for non-existent stream ${streamerId}`);
+          fastify.log.warn(
+            `❌ ICE candidate for non-existent stream ${streamerId}`
+          );
           return;
         }
 
@@ -101,7 +114,9 @@ export default fp(async (fastify) => {
             from: socket.id,
             streamerId
           });
-          fastify.log.info(`🧊 ICE from viewer ${socket.id} to streamer ${streamerId}`);
+          fastify.log.info(
+            `🧊 ICE from viewer ${socket.id} to streamer ${streamerId}`
+          );
         } else {
           // Streamer sending ICE to specific viewer
           const viewerSocket = streamRoom.viewers.get(data.to);
@@ -113,7 +128,9 @@ export default fp(async (fastify) => {
               from: socket.id,
               streamerId
             });
-            fastify.log.info(`🧊 ICE from streamer ${streamerId} to viewer ${data.to}`);
+            fastify.log.info(
+              `🧊 ICE from streamer ${streamerId} to viewer ${data.to}`
+            );
           }
         }
       });
@@ -126,7 +143,7 @@ export default fp(async (fastify) => {
           if (streamRoom.streamerSocket.id === socket.id) {
             // Streamer disconnected - notify all viewers and clean up
             fastify.log.info(`🚨 Streamer ${streamerId} disconnected`);
-            
+
             // Notify all viewers that stream ended
             streamRoom.viewers.forEach((viewerSocket) => {
               viewerSocket.emit("stream-ended", { streamerId });
@@ -142,7 +159,9 @@ export default fp(async (fastify) => {
         for (const streamRoom of activeStreams.values()) {
           if (streamRoom.viewers.has(socket.id)) {
             streamRoom.viewers.delete(socket.id);
-            fastify.log.info(`🗑 Removed viewer ${socket.id} from stream ${streamRoom.streamerId}`);
+            fastify.log.info(
+              `🗑 Removed viewer ${socket.id} from stream ${streamRoom.streamerId}`
+            );
             break;
           }
         }
@@ -153,7 +172,7 @@ export default fp(async (fastify) => {
         const streamRoom = activeStreams.get(data.streamerId);
         if (streamRoom && streamRoom.streamerSocket.id === socket.id) {
           fastify.log.info(`🛑 Stream ${data.streamerId} ended by streamer`);
-          
+
           // Notify all viewers
           streamRoom.viewers.forEach((viewerSocket) => {
             viewerSocket.emit("stream-ended", { streamerId: data.streamerId });
@@ -165,27 +184,32 @@ export default fp(async (fastify) => {
       });
 
       // Handle chat messages (optional enhancement)
-      socket.on("chat-message", (data: { streamerId: string; message: string; senderName: string }) => {
-        const streamRoom = activeStreams.get(data.streamerId);
-        if (streamRoom) {
-          // Broadcast message to all participants in the stream
-          io.to(`stream_${data.streamerId}`).emit("chat-message", {
-            message: data.message,
-            senderName: data.senderName,
-            senderId: socket.id,
-            timestamp: new Date().toISOString()
-          });
-          
-          fastify.log.info(`💬 Chat message in stream ${data.streamerId} from ${data.senderName}`);
+      socket.on(
+        "chat-message",
+        (data: { streamerId: string; message: string; senderName: string }) => {
+          const streamRoom = activeStreams.get(data.streamerId);
+          if (streamRoom) {
+            // Broadcast message to all participants in the stream
+            io.to(`stream_${data.streamerId}`).emit("chat-message", {
+              message: data.message,
+              senderName: data.senderName,
+              senderId: socket.id,
+              timestamp: new Date().toISOString()
+            });
+
+            fastify.log.info(
+              `💬 Chat message in stream ${data.streamerId} from ${data.senderName}`
+            );
+          }
         }
-      });
+      );
     });
 
     // Periodic cleanup of inactive streams (optional)
     setInterval(() => {
       const now = Date.now();
       const timeout = 30000; // 30 seconds timeout
-      
+
       for (const [streamerId, streamRoom] of activeStreams.entries()) {
         if (!streamRoom.streamerSocket.connected) {
           fastify.log.info(`🧹 Cleaning up inactive stream ${streamerId}`);
