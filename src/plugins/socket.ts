@@ -1,5 +1,6 @@
 import fp from "fastify-plugin";
 import fastifySocketIO from "fastify-socket.io";
+import type { DecodedIdToken } from "firebase-admin/lib/auth/token-verifier";
 import { Socket } from "socket.io";
 
 interface StreamRoom {
@@ -15,8 +16,24 @@ export default fp(async (fastify) => {
     const io = fastify.io;
     const activeStreams = new Map<string, StreamRoom>(); // streamerId -> StreamRoom
 
+    io.use(async (socket, next) => {
+      const token = socket.handshake.auth.token as string;
+      if (!token) return next(new Error("Authentication Required"));
+
+      try {
+        const decoded = await fastify.firebase.auth().verifyIdToken(token);
+
+        socket.data.user = decoded;
+        next();
+      } catch (error) {
+        fastify.log.error("socket auth failed: ", error);
+        return next(new Error("Invalid token"));
+      }
+    });
+
     io.on("connection", (socket: Socket) => {
-      fastify.log.info(`✅ Client connected: ${socket.id}`);
+      const user = socket.data.user as DecodedIdToken;
+      fastify.log.info(`✅ Client connected: ${socket.id} | UID: ${user.uid}`);
 
       socket.on("join-room", (data: { role: string; streamerId: string }) => {
         const { role, streamerId } = data;
@@ -182,27 +199,6 @@ export default fp(async (fastify) => {
           activeStreams.delete(data.streamerId);
         }
       });
-
-      // Handle chat messages (optional enhancement)
-      socket.on(
-        "chat-message",
-        (data: { streamerId: string; message: string; senderName: string }) => {
-          const streamRoom = activeStreams.get(data.streamerId);
-          if (streamRoom) {
-            // Broadcast message to all participants in the stream
-            io.to(`stream_${data.streamerId}`).emit("chat-message", {
-              message: data.message,
-              senderName: data.senderName,
-              senderId: socket.id,
-              timestamp: new Date().toISOString()
-            });
-
-            fastify.log.info(
-              `💬 Chat message in stream ${data.streamerId} from ${data.senderName}`
-            );
-          }
-        }
-      );
     });
 
     // Periodic cleanup of inactive streams (optional)
