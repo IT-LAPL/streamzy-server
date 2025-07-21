@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import rateLimit from "@fastify/rate-limit";
 import firebase from "./plugins/firebase";
 import healthRoute from "./routes/health";
 import userRoute from "./routes/user";
@@ -21,6 +22,11 @@ export function buildServer() {
           }
         }
       : true // simple production logger
+  });
+
+  fastify.register(rateLimit, {
+    max: 100,
+    timeWindow: "1 minute"
   });
 
   fastify.register(firebase);
